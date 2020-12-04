@@ -1,0 +1,7 @@
+.tmp
+.download
+output
+.*.sw*
+vendor
+*.log
+*.log.wf

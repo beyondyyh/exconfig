@@ -25,7 +25,11 @@ func init() {
 
 	var err error
 	ecfg, err = exconfig.New(
-		exconfig.DefaultConfig(),
+		&exconfig.Config{
+			ConsulServerAddr: "http://consul-dev.im.weibo.cn:8500",
+			Datacenter:       "kylin_dev",
+			KeyPrefix:        "mp_service/release/manifest",
+		},
 		exconfig.WithSpan(3*time.Second),
 		exconfig.WithLogger(hclog.New(&hclog.LoggerOptions{
 			Name:       "exconfig-example",

@@ -7,14 +7,15 @@ Exconfig 提供基于 [`consul KV`](https://www.consul.io/api-docs/kv) 配置中
 ### 使用Exconfig
 
 **创建一个exconfig**
-> `func New(cfg *Config) (manifest *Manifest, err error)`
+> `func New(cfg *Config, opts ...Option) (manifest *Manifest, err error) {`
 
 - config介绍
     - ConsulServerAddr: consul服务端http地址
     - Datacenter: 数据中心
     - KeyPrefix: key路径，支持监听指定路径下的所有key
-    - DiscoverySpan: 服务发现间隔时间，默认1min
-    - Logger: 日志打印类，用法参考 [`gdp logger`](https://gitlab.weibo.cn/gdp/gdp/wikis/模块列表/Logger#newwriter)
+- opts可选参数
+    - `WithSpan(d time.Duration)`: 服务发现间隔时间，默认1min
+    - `WithLogger(l hclog.Logger)`: 日志打印类，用法参考 [hclog](https://github.com/hashicorp/go-hclog)
 
 - 使用默认config示例：
     ```go
@@ -23,13 +24,23 @@ Exconfig 提供基于 [`consul KV`](https://www.consul.io/api-docs/kv) 配置中
 
 - 使用自定义config示例：
     ```go
-	config := &exconfig.Config{
-		ConsulServerAddr: "http://consul-dev.im.weibo.cn:8500",
-		Datacenter:       "kylin_dev",
-        KeyPrefix:        "mp_service/release/manifest",
-        Logger:           gdpLogger.GetWriter("ral"),
+	ecfg, err := exconfig.New(
+		&exconfig.Config{
+			ConsulServerAddr: "http://consul-dev.im.weibo.cn:8500/",
+			Datacenter:       "kylin_dev",
+			KeyPrefix:        "mp_service/release/manifest",
+		},
+		exconfig.WithSpan(10*time.Second),
+		exconfig.WithLogger(hclog.New(&hclog.LoggerOptions{
+			Name:       "exconfig-example",
+			JSONFormat: true,
+			Color:      hclog.AutoColor,
+		})),
+	)
+	if err != nil {
+		log.Fatal(err)
+		ecfg.Close()
 	}
-	ecfg, err := exconfig.New(config)
     ```
 
 **生成 consul-api 配置**
@@ -49,40 +60,4 @@ Exconfig 提供基于 [`consul KV`](https://www.consul.io/api-docs/kv) 配置中
 
 **示例**
 
-```go
-// 只实例化一次放入内存
-var ecfg *exconfig.Manifest
-
-func init() {
-	config := &exconfig.Config{
-		ConsulServerAddr: "http://consul-dev.im.weibo.cn:8500",
-		Datacenter:       "kylin_dev",
-		KeyPrefix:        "mp_service/release/manifest",
-	}
-
-	var err error
-    ecfg, err = exconfig.New(config)
-    // 出错时记录日志并关闭服务发现
-	if err != nil {
-        log.Fatal(err)
-		ecfg.Close()
-    }
-}
-
-func main() {
-    // 获取 hello/foo 并转换为string
-    foo, err := exconfig.String(ecfg.Acquire("hello/foo"))
-	log.Printf("foo:%s, err:%v\n", foo, err)
-
-    // 获取 enable 并转换为bool
-    enable, err := exconfig.Bool(ecfg.Acquire("enable"))
-    log.Printf("enable:%v, err:%+v\n", enable, err)
-
-    // 获取whitelist 转换为集合
-    reply, err := ecfg.Acquire("whitelist")
-    users, err := exconfig.Sets(reply, err, "\n")
-    // 判断uid 2017223391 是否在白名单内
-    isViper := users.Contains("2017223391")
-    log.Printf("users:%+v, err:%+v isViper:%t\n", users.Elements(), err, isViper)
-}
-```
+参考 [example/main.go](example/main.go)

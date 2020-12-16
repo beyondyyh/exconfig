@@ -37,8 +37,8 @@ func (s spanOption) apply(opts *options) {
 	opts.span = time.Duration(s)
 }
 
-func WithSpan(s time.Duration) Option {
-	return spanOption(s)
+func WithSpan(d time.Duration) Option {
+	return spanOption(d)
 }
 
 type loggerOption struct {
@@ -49,8 +49,8 @@ func (l loggerOption) apply(opts *options) {
 	opts.logger = l.Log
 }
 
-func WithLogger(log hclog.Logger) Option {
-	return loggerOption{Log: log}
+func WithLogger(l hclog.Logger) Option {
+	return loggerOption{Log: l}
 }
 
 // Config...

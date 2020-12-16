@@ -22,13 +22,42 @@ var (
 	ErrNotExists = errors.New("key not exists")
 )
 
+type options struct {
+	span   time.Duration
+	logger hclog.Logger
+}
+
+type Option interface {
+	apply(*options)
+}
+
+type spanOption time.Duration
+
+func (s spanOption) apply(opts *options) {
+	opts.span = time.Duration(s)
+}
+
+func WithSpan(s time.Duration) Option {
+	return spanOption(s)
+}
+
+type loggerOption struct {
+	Log hclog.Logger
+}
+
+func (l loggerOption) apply(opts *options) {
+	opts.logger = l.Log
+}
+
+func WithLogger(log hclog.Logger) Option {
+	return loggerOption{Log: log}
+}
+
 // Config...
 type Config struct {
 	ConsulServerAddr string
 	Datacenter       string
 	KeyPrefix        string
-	DiscoverySpan    time.Duration
-	Logger           hclog.Logger
 }
 
 // defaultLogger used to generate a Config instance with deault config
@@ -37,23 +66,14 @@ func DefaultConfig() *Config {
 		ConsulServerAddr: "http://127.0.0.1:8500",
 		Datacenter:       "dc1",
 		KeyPrefix:        "hello",
-		DiscoverySpan:    defaultDiscoverySpan,
-		Logger:           defaultLogger(),
 	}
 	return cfg
-}
-
-// defaultLogger used to generate a logger with deault config
-func defaultLogger() hclog.Logger {
-	return hclog.New(&hclog.LoggerOptions{
-		Name: "exconfig",
-	})
 }
 
 // Manifest...
 type Manifest struct {
 	cfg       *Config
-	logger    hclog.Logger
+	opts      options
 	apiConfig *api.Config
 	apiClient *api.Client
 	waitIndex uint64
@@ -63,7 +83,7 @@ type Manifest struct {
 }
 
 // New returns instance of Manifest
-func New(cfg *Config) (manifest *Manifest, err error) {
+func New(cfg *Config, opts ...Option) (manifest *Manifest, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("panic info: %v", r)
@@ -72,7 +92,6 @@ func New(cfg *Config) (manifest *Manifest, err error) {
 
 	// bootstrap the config
 	defConfig := DefaultConfig()
-
 	if cfg.ConsulServerAddr == "" {
 		cfg.ConsulServerAddr = defConfig.ConsulServerAddr
 	}
@@ -82,11 +101,17 @@ func New(cfg *Config) (manifest *Manifest, err error) {
 	if cfg.KeyPrefix == "" {
 		cfg.KeyPrefix = defConfig.KeyPrefix
 	}
-	if cfg.DiscoverySpan == 0 {
-		cfg.DiscoverySpan = defConfig.DiscoverySpan
+
+	// bootstrap the options
+	options := options{
+		span: defaultDiscoverySpan,
+		logger: hclog.New(&hclog.LoggerOptions{
+			Name:  "exconfig",
+			Color: hclog.AutoColor,
+		}),
 	}
-	if cfg.Logger == nil {
-		cfg.Logger = defConfig.Logger
+	for _, o := range opts {
+		o.apply(&options)
 	}
 
 	apiConfig := &api.Config{
@@ -100,19 +125,37 @@ func New(cfg *Config) (manifest *Manifest, err error) {
 
 	manifest = &Manifest{
 		cfg:       cfg,
-		logger:    cfg.Logger,
+		opts:      options,
 		apiConfig: apiConfig,
 		apiClient: apiClient,
+		waitIndex: 0,
 		muLock:    sync.RWMutex{},
 		stop:      make(chan struct{}), // blocking
 		warehouse: make(map[string]*api.KVPair, 0),
 	}
-	cfg.Logger = nil
 
 	go manifest.discovery()
 	runtime.Gosched()
 
 	return manifest, nil
+}
+
+// Acquire used to acquire the value by key
+func (m *Manifest) Acquire(key string) (*api.KVPair, error) {
+	m.muLock.RLock()
+	defer m.muLock.RUnlock()
+
+	key = m.cfg.KeyPrefix + "/" + strings.TrimLeft(key, "/")
+	reply, ok := m.warehouse[key]
+	if !ok {
+		return nil, ErrNotExists
+	}
+
+	if reply == nil {
+		return nil, ErrNil
+	}
+
+	return reply, nil
 }
 
 func (m *Manifest) Close() {
@@ -135,18 +178,18 @@ func (m *Manifest) discovery() {
 	for {
 		select {
 		case <-m.stop:
-			m.logger.Info("service stop", "keyPrefix", m.cfg.KeyPrefix)
+			m.opts.logger.Info("service stop", "keyPrefix", m.cfg.KeyPrefix)
 			m.warehouse = nil
 			close(m.stop)
 			return
 		default:
 			options := &api.QueryOptions{
 				WaitIndex: m.waitIndex,
-				WaitTime:  m.cfg.DiscoverySpan,
+				WaitTime:  m.opts.span,
 			}
 			kvPairs, meta, err := m.apiClient.KV().List(m.cfg.KeyPrefix, options)
 			if err != nil {
-				m.logger.Warn("service update fail", "keyPrefix", m.cfg.KeyPrefix, "error", err)
+				m.opts.logger.Warn("service update fail", "keyPrefix", m.cfg.KeyPrefix, "error", err)
 				if retryTimes < defaultRetryTimes {
 					retryTimes++
 				}
@@ -162,7 +205,7 @@ func (m *Manifest) discovery() {
 				} else {
 					topic = "service update success"
 				}
-				m.logger.Info(topic, "keyPrefix", m.cfg.KeyPrefix)
+				m.opts.logger.Info(topic, "keyPrefix", m.cfg.KeyPrefix)
 				m.waitIndex = meta.LastIndex
 				m.setWarehouse(kvPairs)
 			}
@@ -178,22 +221,4 @@ func (m *Manifest) setWarehouse(kvPairs api.KVPairs) {
 	for _, pair := range kvPairs {
 		m.warehouse[pair.Key] = pair
 	}
-}
-
-// Acquire used to acquire the value by key
-func (m *Manifest) Acquire(key string) (*api.KVPair, error) {
-	m.muLock.RLock()
-	defer m.muLock.RUnlock()
-
-	key = m.cfg.KeyPrefix + "/" + strings.TrimLeft(key, "/")
-	reply, ok := m.warehouse[key]
-	if !ok {
-		return nil, ErrNotExists
-	}
-
-	if reply == nil {
-		return nil, ErrNil
-	}
-
-	return reply, nil
 }

@@ -6,13 +6,15 @@ import (
 	"time"
 
 	"github.com/beyondyyh/exconfig"
+	"github.com/hashicorp/go-hclog"
 )
 
 var ecfg *exconfig.Manifest
 
 func init() {
 	// use default config
-	config := exconfig.DefaultConfig()
+	// consul 本地测试服务请参考：https://github.com/beyondyyh/devops/tree/master/consul
+	// config := exconfig.DefaultConfig()
 
 	// use self-defined config
 	// config := &exconfig.Config{
@@ -22,7 +24,15 @@ func init() {
 	// }
 
 	var err error
-	ecfg, err = exconfig.New(config)
+	ecfg, err = exconfig.New(
+		exconfig.DefaultConfig(),
+		exconfig.WithSpan(3*time.Second),
+		exconfig.WithLogger(hclog.New(&hclog.LoggerOptions{
+			Name:       "exconfig-example",
+			JSONFormat: true,
+			Color:      hclog.AutoColor,
+		})),
+	)
 	if err != nil {
 		log.Fatal(err)
 		ecfg.Close()

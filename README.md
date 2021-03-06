@@ -26,7 +26,7 @@ Exconfig 提供基于 [`consul KV`](https://www.consul.io/api-docs/kv) 配置中
     ```go
 	ecfg, err := exconfig.New(
 		&exconfig.Config{
-			ConsulServerAddr: "http://consul-dev.im.weibo.cn:8500/",
+			ConsulServerAddr: "http://127.0.0.1:8500/",
 			Datacenter:       "kylin_dev",
 			KeyPrefix:        "mp_service/release/manifest",
 		},
@@ -50,7 +50,6 @@ Exconfig 提供基于 [`consul KV`](https://www.consul.io/api-docs/kv) 配置中
 > `func (m *Manifest) Acquire(key string) (*api.KVPair, error) {`
 
 **数据类型转换**
-> 更多用法参考源码 [`reply.go`](https://gitlab.weibo.cn/gdp/exconfig/blob/master/reply.go)
 
 - Int: func Int(reply *api.KVPair, err error) (int, error) {
 - Int64: func Int64(reply *api.KVPair, err error) (int64, error) {

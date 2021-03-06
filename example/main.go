@@ -18,7 +18,7 @@ func init() {
 
 	// use self-defined config
 	// config := &exconfig.Config{
-	// 	ConsulServerAddr: "http://consul-dev.im.weibo.cn:8500/",
+	// 	ConsulServerAddr: "http://127.0.0.1:8500/",
 	// 	Datacenter:       "kylin_dev",
 	// 	KeyPrefix:        "mp_service/release/manifest",
 	// }
@@ -26,7 +26,7 @@ func init() {
 	var err error
 	ecfg, err = exconfig.New(
 		&exconfig.Config{
-			ConsulServerAddr: "http://consul-dev.im.weibo.cn:8500",
+			ConsulServerAddr: "http://127.0.0.1:8500",
 			Datacenter:       "kylin_dev",
 			KeyPrefix:        "mp_service/release/manifest",
 		},
